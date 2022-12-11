@@ -1,0 +1,630 @@
+---
+title: "SURV727 Final Project"
+author: "Michael Dunphy"
+date: "2022-11-25"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+install.packages("remotes")
+remotes::install_github("robinspollak/R.openFEC")
+
+install.packages("plyr")
+
+```{r}
+
+# R wrapper for the Open FEC API https://rdrr.io/github/robinspollak/R.openFEC/man/
+library(R.openFEC)
+library(plyr)
+library(dplyr)
+library(httr)
+library(readr)
+library(stringr)
+library(magrittr)
+library(factoextra)
+library(corrplot)
+
+fec_key <- "xVmzxja3eXKa9VgaCHCfLPfcj2qQxXMCXrFcvq2F"
+wd <- getwd()
+
+```
+
+
+```{r}
+
+# load 538 primary candidates
+
+dem <- read.csv("https://raw.githubusercontent.com/fivethirtyeight/data/master/primary-project-2022/dem_candidates.csv")
+head(dem)
+
+rep <- read.csv("https://raw.githubusercontent.com/fivethirtyeight/data/master/primary-project-2022/rep_candidates.csv")
+head(rep)
+
+```
+
+```{r}
+
+# process 538 primary candidate data 
+
+dem["Party"] <- "DEM"
+rep["Party"] <- "GOP"
+
+full_primary_candidates <- rbind.fill(dem, rep)
+head(full_primary_candidates)
+
+write.csv(full_primary_candidates, paste(wd, "/output data/", "full_primary_candidates.csv", sep=''))
+
+```
+
+```{r}
+
+# grab general election candidates 
+
+full_primary_candidates["General.Election.Candidate"] <- FALSE
+
+for (i in 1:nrow(full_primary_candidates)) {
+  # determine in general election candidate
+  if (full_primary_candidates[i, "Primary.Outcome"] == "Won") {
+    full_primary_candidates[i, "General.Election.Candidate"] <- TRUE
+  } else if (full_primary_candidates[i, "Primary.Outcome"] == "Made runoff") {
+    if (full_primary_candidates[i, "Runoff.Outcome"] == "Won" || full_primary_candidates[i, "Runoff.Outcome"] == "" || is.null(full_primary_candidates[i, "Runoff.Outcome"])) {
+      full_primary_candidates[i, "General.Election.Candidate"] <- TRUE
+    }
+  }
+}
+
+full_general_candidates <- full_primary_candidates %>%
+                            filter(General.Election.Candidate == TRUE) %>%
+                            filter(Office == "Representative" | Office == "Senator (unexpired term)" | Office == "Senator")
+
+full_general_candidates$Office[full_general_candidates$Office == "Senator (unexpired term)"] <- "Senator"
+full_general_candidates <- full_general_candidates %>%
+                            filter(duplicated(Candidate) == FALSE)
+
+
+full_general_candidates$index <- row.names(full_general_candidates)
+head(full_general_candidates)
+write.csv(full_general_candidates,  paste(wd, "/output data/", "full_general_candidates.csv", sep=''))
+
+```
+
+```{r}
+
+# District data provided by Dave's Redistricting App https://davesredistricting.org/maps#home
+# Each state's congressional district data was manually exported and combined into a csv
+
+dra_house <- read.csv(paste(wd, "/input data/", "DRA Data - House Districts .csv", sep=''))
+head(dra_house)
+
+dra_senate <- read.csv(paste(wd, "/input data/", "DRA Data - Senate Districts.csv", sep=''))
+head(dra_senate)
+
+# append data sets 
+full_dra_districts <- rbind.fill(dra_house, dra_senate)
+head(full_dra_districts)
+
+# create 2020 white percentage for each district
+full_dra_districts["2020.White.%"] <- as.double(full_dra_districts$White.2020.Total) / as.double(full_dra_districts$Total.2020.Total)
+
+# create 2020 presidential vote share for each party
+full_dra_districts["Dem.2020.Pres.%"] <- as.double(full_dra_districts$Dem.2020.Pres) / as.double(full_dra_districts$Total.2020.Pres)
+full_dra_districts["Rep.2020.Pres.%"] <- as.double(full_dra_districts$Rep.2020.Pres) / as.double(full_dra_districts$Total.2020.Pres)
+
+# create 2016-2020 composite score for each party
+# composite scores are the mean presidential, senate, governor, and attorney general vote shares in the given period
+# VA and NJ have composite scores going from 2016-2021
+# UT is missing composite scores completely
+full_dra_districts["Dem.2016-2020.Comp.%"] <- as.double(full_dra_districts$Dem.2016.2020.Comp) / as.double(full_dra_districts$Total.2016.2020.Comp)
+full_dra_districts["Rep.2016-2020.Comp.%"] <- as.double(full_dra_districts$Rep.2016.2020.Comp) / as.double(full_dra_districts$Total.2016.2020.Comp)
+
+full_dra_districts["Dem.2016-2021.Comp.%"] <- as.double(full_dra_districts$Dem.2016.2021.Comp) / as.double(full_dra_districts$Total.2016.2021.Comp)
+full_dra_districts["Rep.2016-2021.Comp.%"] <- as.double(full_dra_districts$Rep.2016.2021.Comp) / as.double(full_dra_districts$Total.2016.2021.Comp)
+
+full_dra_districts$`Dem.Comp.%` <- ifelse(is.na(full_dra_districts$`Dem.2016-2021.Comp.%`), full_dra_districts$`Dem.2016-2020.Comp.%`, full_dra_districts$`Dem.2016-2021.Comp.%`)
+full_dra_districts$`Rep.Comp.%` <- ifelse(is.na(full_dra_districts$`Rep.2016-2021.Comp.%`), full_dra_districts$`Rep.2016-2020.Comp.%`, full_dra_districts$`Rep.2016-2021.Comp.%`)
+
+full_dra_districts["Dem-Rep.2020"] <- full_dra_districts["Dem.2020.Pres.%"] - full_dra_districts["Rep.2020.Pres.%"]
+full_dra_districts["Dem-Rep.Comp"] <- full_dra_districts["Dem.Comp.%"] - full_dra_districts["Rep.Comp.%"]
+
+# select office, id, state, and created columns
+full_dra_districts.trimmed <- full_dra_districts %>%
+                                select(DRA.Office, ID, State, `Dem.2020.Pres.%`, `Rep.2020.Pres.%`, `Dem.Comp.%`, `Rep.Comp.%`, `2020.White.%`, `Dem-Rep.2020`, `Dem-Rep.Comp`)
+
+# convert ID to char type for joining later
+full_dra_districts.trimmed$ID <- as.character(full_dra_districts.trimmed$ID)
+
+head(full_dra_districts.trimmed)
+
+write.csv(full_dra_districts.trimmed,  paste(wd, "/output data/", "full_dra_districts.trimmed.csv", sep=''))
+
+```
+
+
+```{r}
+
+# Collecting data from the FEC
+
+# candidate data for the 2021-2022 cycle pulled from here: https://www.fec.gov/data/browse-data/?tab=bulk-data
+# description of file: https://www.fec.gov/campaign-finance-data/all-candidates-file-description/
+
+header <- "CAND_ID|CAND_NAME|CAND_ICI|PTY_CD|CAND_PTY_AFFILIATION|TTL_RECEIPTS|TRANS_FROM_AUTH|TTL_DISB|TRANS_TO_AUTH|COH_BOP|COH_COP|CAND_CONTRIB|CAND_LOANS|OTHER_LOANS|CAND_LOAN_REPAY|OTHER_LOAN_REPAY|DEBTS_OWED_BY|TTL_INDIV_CONTRIB|CAND_OFFICE_ST|CAND_OFFICE_DISTRICT|SPEC_ELECTION|PRIM_ELECTION|RUN_ELECTION|GEN_ELECTION|GEN_ELECTION_PRECENT|OTHER_POL_CMTE_CONTRIB|POL_PTY_CONTRIB|CVG_END_DT|INDIV_REFUNDS|CMTE_REFUNDS"
+
+base <- toString(read_file(paste(wd, "/input data/", "weball22.txt", sep=''))[1])
+
+init <- file(paste(wd, "/output data/", "weball22_header.txt", sep=''))
+writeLines(paste(append(header, base), sep = "|"), init)
+close(init)
+
+fec_candidate_info <- read.table(paste(wd, "/output data/", "weball22_header.txt", sep=''), sep= "|", header=TRUE)
+head(fec_candidate_info)
+
+# fec data has some misaligned columns using the read.table function. Data was imported to google sheets and manually modified to get columns in the correct order.
+# google sheet: https://docs.google.com/spreadsheets/d/150dhkj1xrFwfi43ouYqu0LFLcj4jRMetXSRucYLTDIk/edit?usp=sharing
+
+fec_candidate_info_fixed <- read.csv(paste(wd, "/input data/", "FEC Candidate Data - Fixed.csv", sep=''))
+
+fec_candidate_info_fixed$FEC_index <- row.names(fec_candidate_info_fixed)
+head(fec_candidate_info_fixed)
+
+```
+
+```{r}
+
+# match general election candidates from 538 with candidates in FEC candidate data seton last name, district, state, office, and party
+
+# prep 538 data set
+head(full_general_candidates)
+
+full_general_candidates.matching <- select(full_general_candidates, index, Candidate, State, Office, District, Party)
+
+# remove parts of name that interferes with grabbing last name
+full_general_candidates.matching$Candidate_processed <- str_pad(full_general_candidates.matching$Candidate, width=1, side="right")
+full_general_candidates.matching$Candidate_processed <- gsub(" Sr. ", "", full_general_candidates.matching$Candidate_processed)
+full_general_candidates.matching$Candidate_processed <- gsub(" Jr. ", "", full_general_candidates.matching$Candidate_processed)
+full_general_candidates.matching$Candidate_processed <- gsub(" II ", "", full_general_candidates.matching$Candidate_processed)
+full_general_candidates.matching$Candidate_processed <- gsub(" III ", "", full_general_candidates.matching$Candidate_processed)
+
+# extract last name and store in new column
+full_general_candidates.matching$Last_name <- word(full_general_candidates.matching$Candidate_processed, - 1) 
+full_general_candidates.matching$Last_name <- toupper(full_general_candidates.matching$Last_name)
+full_general_candidates.matching$Last_name <- gsub(" ", "", full_general_candidates.matching$Last_name)
+
+# change districts to match district format with FEC data set
+full_general_candidates.matching$District_processed <- full_general_candidates.matching$District
+full_general_candidates.matching$District_processed[full_general_candidates.matching$District == "At-Large"] <- 0
+full_general_candidates.matching$District_processed[full_general_candidates.matching$District == "N/A"] <- 0
+
+# convert full state names to abbreviated names to match FEC format
+states_dict <- c(AL = "Alabama",
+                AK = "Alaska",
+                AZ = "Arizona",
+                AR = "Arkansas",
+                CA = "California",
+                CO = "Colorado",
+                CT = "Connecticut",
+                DE = "Delaware",
+                FL = "Florida",
+                GA = "Georgia",
+                HI = "Hawaii",
+                ID = "Idaho",
+                IL = "Illinois",
+                IN = "Indiana",
+                IA = "Iowa",
+                KS = "Kansas",
+                KY = "Kentucky",
+                LA = "Louisiana",
+                ME = "Maine",
+                MD = "Maryland",
+                MA = "Massachusetts",
+                MI = "Michigan",
+                MN = "Minnesota",
+                MS = "Mississippi",
+                MO = "Missouri",
+                MT = "Montana",
+                NE = "Nebraska",
+                NV = "Nevada",
+                NH = "New Hampshire",
+                NJ = "New Jersey",
+                NM = "New Mexico",
+                NY = "New York",
+                NC = "North Carolina",
+                ND = "North Dakota",
+                OH = "Ohio",
+                OK = "Oklahoma",
+                OR = "Oregon",
+                PA = "Pennsylvania",
+                RI = "Rhode Island",
+                SC = "South Carolina",
+                SD = "South Dakota",
+                TN = "Tennessee",
+                TX = "Texas",
+                UT = "Utah",
+                VT = "Vermont",
+                VA = "Virginia",
+                WA = "Washington",
+                WV = "West Virginia",
+                WI = "Wisconsin",
+                WY = "Wyoming")
+
+full_general_candidates.matching$State_processed <- state.abb[match(full_general_candidates.matching$State,state.name)]
+
+head(full_general_candidates.matching)
+write.csv(full_general_candidates.matching, paste(wd, "/output data/", "full_general_candidates.matching.csv", sep=''))
+
+
+# prep FEC data set
+head(fec_candidate_info_fixed)
+
+fec_candidate_info_fixed.matching <- select(fec_candidate_info_fixed, FEC_index, CAND_NAME, CAND_PTY_AFFILIATION, CAND_ID, CAND_OFFICE_ST, CAND_OFFICE_DISTRICT)
+
+fec_candidate_info_fixed.matching$Last_Name_FEC <- word(fec_candidate_info_fixed.matching$CAND_NAME, sep = ",", 1)
+fec_candidate_info_fixed.matching$Last_Name_FEC <- word(fec_candidate_info_fixed.matching$Last_Name_FEC, sep = " ", 1) 
+fec_candidate_info_fixed.matching$Last_Name_FEC <- gsub(" FOR AZ", "", fec_candidate_info_fixed.matching$Last_Name_FEC)
+
+fec_candidate_info_fixed.matching$CAND_PTY_AFFILIATION_processed <- gsub("REP", "GOP", fec_candidate_info_fixed.matching$CAND_PTY_AFFILIATION)
+
+fec_candidate_info_fixed.matching$CAND_OFFICE_DISTRICT <- as.character(fec_candidate_info_fixed.matching$CAND_OFFICE_DISTRICT)
+
+head(fec_candidate_info_fixed.matching)
+write.csv(fec_candidate_info_fixed.matching, paste(wd, "/output data/", "fec_candidate_info_fixed.matching.csv", sep=''))
+
+```
+
+```{r}
+
+# join the two data sets
+matched_candidates <- left_join(full_general_candidates.matching, fec_candidate_info_fixed.matching, by = c("Last_name" = "Last_Name_FEC", "Party" = "CAND_PTY_AFFILIATION_processed", "State_processed" = "CAND_OFFICE_ST", "District_processed" = "CAND_OFFICE_DISTRICT"))
+
+head(matched_candidates)
+write.csv(matched_candidates, paste(wd, "/output data/", "matched_candidates.csv", sep=''))
+
+```
+
+```{r}
+
+# 741 candidates were matched to FEC candidate ID, 161 candidates were not matched to Candidate ID
+# candidates that were not matched were manually looked up on the FEC website here: https://www.fec.gov/data/
+# data was brought into google sheets and candidate ID was added to the "Processed" tab: https://docs.google.com/spreadsheets/d/1pTsuw7WOrjhXHEpBEHfbM-e2JXXCveodOlBk6RTqjMo/edit?usp=sharing
+# any candidate that did not have a candidate ID had their corresponding committee ID added under "Committee_ID_grabbed"
+
+# import processed data set
+matched_candidates_processed <- read.csv(paste(wd, "/input data/", "Matched Candidates - Processed.csv", sep=''))
+head(matched_candidates_processed)
+
+# select only candidate, candidate id, and committee id columns
+matched_candidates_processed_trimmed <- matched_candidates_processed %>%
+                                          select(Candidate, CAND_ID, Committee_ID_Grabbed, State_processed)
+head(matched_candidates_processed_trimmed)
+
+write.csv(matched_candidates_processed_trimmed, paste(wd, "/output data/", "matched_candidates_processed_trimmed.csv", sep=''))
+
+```
+
+
+```{r}
+
+# contributions by individuals downloaded in bulk from here: https://www.fec.gov/data/browse-data/?tab=bulk-data
+# description of file: https://www.fec.gov/campaign-finance-data/contributions-individuals-file-description/
+
+# added header info to the top of the intcont.txt file
+fec_receipts <- read.table(paste(wd, "/input data/indiv22/", "itcont.txt", sep=''), sep= "|", header=TRUE, fill=TRUE)
+head(fec_receipts)
+
+write.csv(fec_receipts, paste(wd, "/output data/", "fec_receipts.csv", sep=''))
+
+```
+
+```{r, warning=FALSE}
+
+# the bulk data set showed discrepancies and errors so the data was manually pulled by individual states and joined together.
+
+folder <- paste(wd, "/input data/FEC Receipts", sep='')
+csv_files <- list.files(folder, pattern = "*.csv")
+
+df_list <- list()
+for (file in csv_files) {
+  df <- read_csv(file.path(folder, file), show_col_types = FALSE) %>%
+          mutate(across(everything(), as.character))
+  df_list[[file]] <- df
+}
+
+fec_receipts_combined <- bind_rows(df_list)
+head(fec_receipts_combined)
+
+write.csv(fec_receipts_combined, paste(wd, "/output data/", "fec_receipts_combined.csv", sep=''))
+
+# create a trimmed data set for joining purposes
+fec_receipts_combined.trimmed <- fec_receipts_combined %>%
+                                  select(committee_id, transaction_id, contributor_state, contributor_zip, contributor_id, contribution_receipt_date, contribution_receipt_amount, contributor_aggregate_ytd)
+head(fec_receipts_combined.trimmed)
+
+write.csv(fec_receipts_combined.trimmed, paste(wd, "/output data/", "fec_receipts_combined.trimmed.csv", sep=''))
+
+```
+
+```{r}
+
+# get contribution totals for each committee id 
+fec_receipts_grouped <- fec_receipts_combined %>%
+                          group_by(committee_id) %>%
+                          summarise(total_fundraised = sum(as.double(contribution_receipt_amount)))
+head(fec_receipts_grouped)
+
+write.csv(fec_receipts_grouped, paste(wd, "/output data/", "fec_receipts_grouped.csv", sep=''))
+
+```
+
+```{r}
+
+# to link candidates to their committees, FEC provides a bulk data set that can be found here under 'Candidate-committee linkages': https://www.fec.gov/data/browse-data/?tab=bulk-data
+# a description of the file can be found here: https://www.fec.gov/campaign-finance-data/candidate-committee-linkage-file-description/
+
+# the ccl.txt file was modified to include the header: ccl_header_file.csv
+fec_candidate_committees <- read.table(paste(wd, "/input data/", "ccl.txt", sep=''), sep= "|", header=TRUE, fill=TRUE)
+head(fec_candidate_committees)
+
+# select candidate id, committee id, linkage id
+fec_candidate_committees_trimmed <- fec_candidate_committees %>%
+                                      select(CAND_ID, CMTE_ID, LINKAGE_ID)
+
+write.csv(fec_candidate_committees_trimmed, paste(wd, "/output data/", "fec_candidate_committees_trimmed.csv", sep=''))
+
+```
+
+```{r}
+
+# Election results were collected manually off of the NYT Election tracker: https://www.nytimes.com/interactive/2022/11/08/us/elections/results-senate.html?action=click&pgtype=Article&state=default&module=election-results&context=election_recirc&region=NavBar
+# Data was collected and inputed into this spreadsheet: https://docs.google.com/spreadsheets/d/1azMpRjQ9sRgW_ULf6qvpouKnwAHWRi_eY1U-RnLPKjI/edit?usp=sharing
+
+nyt_election_results <- read.csv(paste(wd, "/input data/", "NYT Election Tracker Data - General Election Candidates.csv", sep='')) %>%
+                          select(State, Office, District, Candidate, Winner.)
+head(nyt_election_results)
+
+```
+
+```{r}
+
+# join datasets together
+
+# 538 general election candidates with matched data set with FEC candidate IDs
+candidates_match <- left_join(full_general_candidates, matched_candidates_processed_trimmed, by = c("Candidate" = "Candidate"))
+head(candidates_match)
+
+# Joined data set with FEC committee linkage data set
+candidates_match_committee <- left_join(candidates_match, fec_candidate_committees_trimmed, by= c("CAND_ID" = "CAND_ID"))
+
+# add manually grabbed committee ids for candidates who had no candidate id
+committee_ids <- list()
+for (i in 1:nrow(candidates_match_committee)){
+  if (is.na(candidates_match_committee[i, "CMTE_ID"])) {
+    candidates_match_committee[i, "CMTE_ID"] <- candidates_match_committee[i, "Committee_ID_Grabbed"]
+  }
+}
+head(candidates_match_committee)
+
+# export joined data set to manually added committee id's that are missing for each candidate
+write.csv(candidates_match_committee, paste(wd, "/output data/", "candidates_match_committee.csv", sep=''))
+
+# exported data set added to this google sheet: https://docs.google.com/spreadsheets/d/1t-FL4YxdFEmuivzswmWQ-N8JvJrHWdvEScJp5FoCxXs/edit?usp=sharing
+# load processed data set from google sheet with added committee ids
+candidates_match_committee_processed <- read.csv(paste(wd, "/input data/", "Candidate ID, Committee ID - Processed.csv", sep=''))
+
+# Joined data set with total fundraising by committee data set
+candidates_match_committee_receipts <- left_join(candidates_match_committee_processed, fec_receipts_grouped, by = c("CMTE_ID" = "committee_id"))
+head(candidates_match_committee_receipts)
+
+# Joined data set with DRA district data set
+candidates_match_committee_receipts_districts <- left_join(candidates_match_committee_receipts, full_dra_districts.trimmed, by = c("Office" = "DRA.Office", "District" = "ID", "State_processed" = "State"))
+head(candidates_match_committee_receipts_districts)
+
+# Joined data set with NYT election results data set
+candidates_match_committee_receipts_districts_results <- left_join(candidates_match_committee_receipts_districts, nyt_election_results, by = c("Office" = "Office", "District" = "District", "State" = "State", "Candidate" = "Candidate"))
+head(candidates_match_committee_receipts_districts_results)
+
+write.csv(candidates_match_committee_receipts_districts_results, paste(wd, "/output data/", "candidates_match_committee_receipts_districts_results.csv", sep=''))
+
+```
+
+```{r}
+
+# processed joined data set for analysis
+
+# filter out districts with no Democratic or Republican opponent. This accounts for 22 districts.
+# Districts included: AL-1, AL-6, AZ-8, AZ-9, FL-5, FL-6, FL-19, IL-7, NY-13, PA-3, PA-13, PA-14, SC-3, SD-At-Large, TX-6, TX-11, TX-19, TX-25, TX-26, TX-31, WI-6, WI-8
+
+# filter out districts that were missing a candidate in the 538 data set. This accounts for 3 districts
+# Districts included: MI-4, PA-15, UT Senate
+
+removed_districts <- c("AL-1", "AL-6", "AZ-8", "AZ-9", "FL-5", "FL-6", "FL-19", "IL-7", "NY-13", "PA-3", "PA-13", "PA-14", "SC-3", "SD-At-Large", "TX-6", "TX-11", "TX-19", "TX-25", "TX-26", "TX-31", "WI-6", "WI-8", "MI-4", "PA-15", "UT-N/A")
+filtered_data <- candidates_match_committee_receipts_districts_results %>%
+                  mutate(full_district = paste(State_processed, "-", as.character(District), sep='')) %>%
+                  filter(! full_district %in% removed_districts)
+
+# have district partisanship values correspond with candidate party
+for (i in 1:nrow(filtered_data)) {
+  filtered_data[i, "Pres_2020"] <- ifelse(filtered_data[i, "Party"] == "DEM", filtered_data[i, "Dem.2020.Pres.%"], ifelse(filtered_data[i, "Party"] == "GOP", filtered_data[i, "Rep.2020.Pres.%"], 0))
+  filtered_data[i, "Comp"] <- ifelse(filtered_data[i, "Party"] == "DEM", filtered_data[i, "Dem.Comp.%"], ifelse(filtered_data[i, "Party"] == "GOP", filtered_data[i, "Rep.Comp.%"], 0))
+}
+
+# convert gender to a numeric with 1 representing male and 0 representing female
+filtered_data$Gender.Num <- ifelse(filtered_data$Gender == "Male", 1, ifelse(filtered_data$Gender == "Female", 0, -99))
+
+# convert race to dummy variables
+filtered_data$Race.2 <- ifelse(filtered_data$Race.2 == "", NA, filtered_data$Race.2)
+filtered_data$White <- ifelse(!is.na(filtered_data$Race.2), grepl("White", filtered_data$Race.1) | grepl("White", filtered_data$Race.2), grepl("White", filtered_data$Race.1))
+filtered_data$White.Num <- ifelse(filtered_data$White, 1, 0)
+filtered_data$Black <- ifelse(!is.na(filtered_data$Race.2), grepl("Black", filtered_data$Race.1) | grepl("Black", filtered_data$Race.2), grepl("Black", filtered_data$Race.1))
+filtered_data$Black.Num <- ifelse(filtered_data$Black, 1, 0)
+filtered_data$Asian <- ifelse(!is.na(filtered_data$Race.2), grepl("Asian", filtered_data$Race.1) | grepl("Asian", filtered_data$Race.2), grepl("Asian", filtered_data$Race.1))
+filtered_data$Asian.Num <- ifelse(filtered_data$Asian, 1, 0)
+filtered_data$Latino <- ifelse(!is.na(filtered_data$Race.2), grepl("Latino", filtered_data$Race.1) | grepl("Latino", filtered_data$Race.2), grepl("Latino", filtered_data$Race.1))
+filtered_data$Latino.Num <- ifelse(filtered_data$Latino, 1, 0)
+filtered_data$Middle_Eastern <- ifelse(!is.na(filtered_data$Race.2), grepl("Middle Eastern", filtered_data$Race.1) | grepl("Middle Eastern", filtered_data$Race.2), grepl("Middle Eastern", filtered_data$Race.1))
+filtered_data$Middle_Eastern.Num <- ifelse(filtered_data$Middle_Eastern, 1, 0)
+filtered_data$Native_American <- ifelse(!is.na(filtered_data$Race.2), grepl("Native", filtered_data$Race.1) | grepl("Native", filtered_data$Race.2), grepl("Native", filtered_data$Race.1))
+filtered_data$Native_American.Num <- ifelse(filtered_data$Native_American, 1, 0)
+
+# convert incumbent to a numeric dummy variable
+filtered_data$Incumbent.Num <- ifelse(str_detect(filtered_data$Incumbent, "Yes"), 1, 0)
+
+# convert trump endorsement to a numeric dummy variable
+filtered_data$Trump.Num <- ifelse(str_detect(filtered_data$Trump, "Yes"), 1, 0)
+
+# convert party committee endorsement to a numeric dummy variable
+filtered_data$Party.Committee.Num <- ifelse(str_detect(filtered_data$Party.Committee, "Yes"), 1, 0)
+
+# convert emily's list endorsement to a numeric dummy variable
+filtered_data$Emily.s.List.Num <- ifelse(str_detect(filtered_data$EMILY.s.List, "Yes"), 1, 0)
+
+# convert maggie's list endorsement to a numeric dummy variable
+filtered_data$Maggie.s.List.Num <- ifelse(str_detect(filtered_data$Maggie.s.List, "Yes"), 1, 0)
+
+# convert sanders endorsement to a numeric dummy variable
+filtered_data$Sanders.Num <- ifelse(str_detect(filtered_data$Sanders, "Yes"), 1, 0)
+
+# convert renew america endorsement to a numeric dummy variable
+filtered_data$Renew.America.Num <- ifelse(str_detect(filtered_data$Renew.America, "Yes"), 1, 0)
+
+# convert winner to a numeric dummy variable
+filtered_data$Winner.Num <- ifelse(filtered_data$Winner, 1, 0)
+
+# convert office to a dummy variable
+filtered_data$Senator.Num <- ifelse(!filtered_data$Office == "Representative", 1, 0)
+
+# convert total fundraised to numeric value, replacing na's with 0
+filtered_data$total_fundraised <- as.double(filtered_data$total_fundraised)
+filtered_data$total_fundraised[is.na(filtered_data$total_fundraised)] <- 0
+
+write.csv(filtered_data, paste(wd, "/output data/", "filtered_data.csv", sep=''))
+
+```
+
+```{r}
+
+# take filtered data and join it with receipt data to view contributions over time
+final_receipt_date <- left_join(filtered_data, fec_receipts_combined.trimmed, by = c("CMTE_ID" = "committee_id"))
+head(final_receipt_date)
+
+write.csv(final_receipt_date, paste(wd, "/output data/", "final_receipt_date.csv", sep=''))
+
+```
+
+
+```{r}
+
+# grouped filter data by selected columns to get total fundraised from multiple committees supporting the same candidate
+final <- filtered_data %>%
+            group_by(Candidate, State, District, Gender.Num, White.Num, Black.Num, Asian.Num, Latino.Num, Middle_Eastern.Num, Native_American.Num, Incumbent.Num, Senator.Num, Trump.Num, Party.Committee.Num, Emily.s.List.Num, Maggie.s.List.Num, Sanders.Num, Renew.America.Num, Winner.Num, `2020.White.%`, `Pres_2020`, `Comp`, `Dem-Rep.2020`, `Dem-Rep.Comp`) %>%
+            summarise(total_fundraised_sum = sum(total_fundraised))
+
+# replace NA's with 0
+final[is.na(final)] <- 0
+
+final <- as.data.frame(final)
+head(final)
+
+write.csv(final, paste(wd, "/output data/", "final.csv", sep=''))
+
+```
+
+```{r}
+
+# filter data for representatives and senators
+final_house <- final %>%
+                filter(Senator.Num == 0) %>%
+                select(-Senator.Num)
+
+final_senate  <- final %>%
+                  filter(Senator.Num == 1) %>%
+                  select(-District, -Senator.Num)
+
+# filter data for competitive districts
+# competitive districts defined as districts with + or - 10 ppt difference in 2020 vote share (DEM - GOP)
+final_competitive <- final %>%
+                      filter(abs(`Dem-Rep.2020`) <= .1) %>%
+                      select(-District)
+
+```
+
+```{r}
+
+# build linear model for each office level for fundraising
+# house of representatives
+house_model <- glm(total_fundraised_sum ~ . - Candidate - State - District, data = final_house, family="gaussian")
+summary(house_model)
+plot(house_model)
+
+```
+
+```{r}
+
+# build linear model for each office level for fundraising
+# senate model
+senate_model <- glm(total_fundraised_sum ~ . - Candidate - State, data = final_senate, family="gaussian")
+summary(senate_model)
+plot(senate_model)
+
+```
+
+```{r}
+
+# build linear model for each office level for fundraising
+# competitive districts
+competitive_model <- glm(total_fundraised_sum ~ . - Candidate - State, data = final_competitive, family="gaussian")
+summary(competitive_model)
+plot(competitive_model)
+
+```
+
+```{r}
+
+# build logistic model for probability of winning
+# house of representatives
+house_model2 <- glm(Winner.Num ~ . - Candidate - State - District, data = final_house, family="binomial")
+summary(house_model2)
+plot(house_model2)
+
+```
+
+```{r}
+
+# build logistic model for probability of winning
+# senate
+senate_model2 <- glm(Winner.Num ~ . - Candidate - State, data = final_senate, family="binomial")
+summary(senate_model2)
+plot(senate_model2)
+
+```
+
+```{r}
+
+# build logistic model for probability of winning
+# competitive
+competitive_model2 <- glm(Winner.Num ~ . - Candidate - State, data = final_competitive, family="binomial")
+summary(competitive_model2)
+plot(competitive_model2)
+
+```
+
+```{r}
+
+# pca 
+final_pca <-
+  as.data.frame(final) %>%
+  select(-Candidate, -State, -District, -Asian.Num) %T>%
+  pairs(.)
+
+pca <- prcomp(x = final_pca, 
+                  scale. = TRUE)
+summary(pca)
+fviz_screeplot(pca)
+
+pca$rotation[, 1:3]
+var <- get_pca_var(pca)
+corrplot(var$cos2, is.corr = FALSE)
+
+```
+
