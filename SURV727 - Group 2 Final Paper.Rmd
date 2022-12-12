@@ -24,6 +24,7 @@ library(magrittr)
 library(factoextra)
 library(corrplot)
 library(lubridate)
+library(gtrendsR)
 library(reshape2)
 
 fec_key <- "xVmzxja3eXKa9VgaCHCfLPfcj2qQxXMCXrFcvq2F"
@@ -33,7 +34,11 @@ wd <- getwd()
 
 ## Introduction
 
-Since 2010 and the controversial decision of Citizens United vs. FEC, the amount of money spent on political campaigns has risen exponentially. In 2010, a midterm election where infamously Republicans picked up a half dozen seats in the Senate and more than 60 seats in the House, political expenditures totaled around $3.6B (https://www.opensecrets.org/elections-overview/cost-of-election?cycle=2020&display=T&infl=N). In 2022, that number ___. With each fundraising cycle there are candidates that perform worse or better based on candidate quality and the overall political climate. 
+Since 2010 and the controversial decision of Citizens United vs. FEC, the amount of money spent on political campaigns has risen exponentially. In 2010, a midterm election where infamously Republicans picked up a half dozen seats in the Senate and more than 60 seats in the House, political expenditures totaled around 3.6B. In 2022, that number is projected to be around $8.9B. (https://www.opensecrets.org/elections-overview/cost-of-election?cycle=2020&display=T&infl=N)
+
+Candidates with more money win more often, so fundraising has become a critical indicator of election forecasting and understanding the current political climate. (https://www.opensecrets.org/elections-overview/winning-vs-spending)
+
+Major partisan events that dominate the greater political discussion often cause a mass influx of capital to political campaigns. With each fundraising cycle there are candidates that perform worse or better based on candidate quality and the overall political climate. Our goal is to identify those trends in contributions that correlate with significant political shocks during the 2022 midterm cycle, as well as identify characteristics of candidates that affected fundraising performance. In our analysis, we build a linear model to identify those candidates that were above or below fundraising expectations - controlling for the characteristics of candidates and their districts. We conduct principal component analysis to identify which variables are the most predictive for our model. We also utilize data visualizations such as highest fundraising performance by party and office and plotting fundraising numbers over time through the 2022 election cycle.
 
 Our goal is to identify trends in contributions that correlate with significant political shocks during the 2022 midterm cycle as well as identify characteristics of candidates that affected fundraising performance.
 
@@ -41,7 +46,9 @@ Our goal is to identify trends in contributions that correlate with significant 
 
 Data collected for this analysis came from multiple sources. To start, we collected data from 538’s “2022 Primary Project” GitHub repository (https://github.com/fivethirtyeight/data/tree/master/primary-project-2022) which tracked the 2022 midterm primary candidates at the federal level. We processed this data to extract general election candidates by filtering candidates based on whether or not they won their primary election (or if there was one, their runoff election). 900 candidates were pulled with information on endorsements, incumbency status, race, and gender of the candidates. 
 
-Contributions to candidates were provided by the FEC (https://www.fec.gov/) which tracks federal level campaign finance information. We tried using the FEC API, relying on the R.openFEC package (https://rdrr.io/github/robinspollak/R.openFEC/man/) in R, but were unsuccessful in processing the data in a reasonable time, and thus shifted methods to pulling data straight from the FEC website. This data included ‘Candidate-committee linkages’ and ‘Contributions by individuals’ on the bulk data webpage (https://www.fec.gov/data/browse-data/?tab=bulk-data). The 538 general election candidate data set was joined with the candidate-committee linkages FEC data set by office, state, district, and candidate last name to get FEC candidate IDs and committee IDs that will be used later on into the analysis. Individual contribution bulk data was brought into R and found to have discrepancies and errors. Due to this, we manually pulled individual state receipts (https://www.fec.gov/data/receipts/individual-contributions/?two_year_transaction_period=2022&min_date=01%2F01%2F2022&max_date=12%2F31%2F2022&recipient_committee_type=S&recipient_committee_type=H) for the year of 2022 using custom filters and unioned together in R. Receipt data is up to the last FEC report date which was 10/19/2022. This data was joined with our candidate data set on candidate ID and committee ID to view total fundraising numbers for each candidate as well as the timeline of contributions.
+Contributions to candidates were provided by the FEC (https://www.fec.gov/) which tracks federal level campaign finance information. We tried using the FEC API, relying on the R.openFEC package (https://rdrr.io/github/robinspollak/R.openFEC/man/) in R, but were unsuccessful in processing the data in a reasonable time, and thus shifted methods to pulling data straight from the FEC website. This data included ‘Candidate-committee linkages’ and ‘Contributions by individuals’ on the bulk data webpage (https://www.fec.gov/data/browse-data/?tab=bulk-data). The 538 general election candidate data set was joined with the candidate-committee linkages FEC data set by office, state, district, and candidate last name to get FEC candidate IDs and committee IDs that will be used later on into the analysis. 
+
+Individual contribution bulk data was brought into R and found to have discrepancies and errors. Due to this, we manually pulled individual state receipts (https://www.fec.gov/data/receipts/individual-contributions/?two_year_transaction_period=2022&min_date=01%2F01%2F2022&max_date=12%2F31%2F2022&recipient_committee_type=S&recipient_committee_type=H) for the year of 2022 using custom filters and unioned together in R. Receipt data is up to the last FEC report date which was 10/19/2022. This data was joined with our candidate data set on candidate ID and committee ID to view total fundraising numbers for each candidate as well as the timeline of contributions.
 
 Google trends data was provided by Google, using the gtrendsR R package (https://cran.r-project.org/web/packages/gtrendsR/gtrendsR.pdf) to identify key issues that were of high salience in this election cycle. We wanted to focus on the issue of abortion and Trump’s influence which is why we searched the following terms: ‘abortion’, ‘supreme court’, ‘Trump’, ‘FBI’, and ‘crime’. Crime was included as a comparison as it was another major issue for many voters this cycle.
 
@@ -544,8 +551,17 @@ final_competitive <- final %>%
 head(final_competitive)
 
 ```
+#Fig. 1.
+```{r}
+require(gtrendsR)
+Gtrenddata2022 <- gtrends(c("Abortion", "Trump", "Supreme Court", "Crime", "FBI"), 
+               geo = "US", time = "2022-01-01 2022-12-01",onlyInterest = TRUE)
 
+plot(Gtrenddata2022)
+```
+Fig. 1 tracks the number of Google searches related to the terms Abortion, Crime, FBI, Supreme Court, Trump over the last year. These terms generally reflect the issues that were salient during the 2022 election. Abortion and Trump were most prevalent in the public's mind reflected by the most US Google search hits. Both Abortion and Supreme Court spike around the time of the Dobb's decision that overturned Roe v. Wade. The spike in both FBI and Trump coincides with the Mar-a-Lago raid in early September. Crime was another major issue with voters in the election, yet we don't see large changes in the amount people searched Google for crime related topics. We also tested Economy, and it had a similar trend as crime, but with less hits.
 
+#Fig. 2.
 ```{r}
 
 # cumulative sum of contributions
@@ -557,7 +573,7 @@ final_receipt_date_party_cumulative <- final_receipt_date %>%
 ggplot(final_receipt_date_party_cumulative, aes(x = as.Date(contribution_receipt_date)), y = cumulative_fundraised, color = Party) +
   geom_line(aes(y = cumulative_fundraised, color = Party)) +
   scale_x_date(limits = as.Date(c("2022-01-01", "2022-10-19"))) +
-  labs(title = "Cummulative Sum of Individual Contributions for Federal Candidates of \nEach Party", 
+  labs(title = "Fig. 2 Cummulative Sum of Individual Contributions for Federal Candidates of \nEach Party", 
        x = "Day of Contribution", 
        y = "Contribution Amount ($)") +
   scale_color_manual(values = c("GOP" = "red", "DEM" = "blue")) +
@@ -569,8 +585,9 @@ ggplot(final_receipt_date_party_cumulative, aes(x = as.Date(contribution_receipt
   theme(panel.grid.major.y = element_line(color = "grey", size = 0.1))
 
 ```
-This is the cumulative sum of all contributions from 1/1/22 - 10/19/22. You can see both parties spiked at the end of quarter deadlines - at the end of a disclosure period, each campaign has to publicly release their fundraising report for that quarter. Candidates tend to push to bring in as much money as they can so when their records are released they can show fundraising momentum. While both parties spike at EOQ deadlines, the Democrats clearly outperformed the Republicans after Q1. This could be in part due to the fact the Democrats rely more on individual contributions than Republicans - who tend to make up the shortfall in candidate fundraising by spending millions of dollars from outside groups https://www.washingtonpost.com/politics/2022/10/07/house-democrats-fundraising/. 
+Fig. 2 is the cumulative sum of all contributions from 1/1/22 - 10/19/22. You can see both parties spiked at the end of quarter deadlines - at the end of a disclosure period, each campaign has to publicly release their fundraising report for that quarter. Candidates tend to push to bring in as much money as they can so when their records are released they can show fundraising momentum. While both parties spike at EOQ deadlines, the Democrats clearly outperformed the Republicans after Q1. This could be in part due to the fact the Democrats rely more on individual contributions than Republicans - who tend to make up the shortfall in candidate fundraising by spending millions of dollars from outside groups https://www.washingtonpost.com/politics/2022/10/07/house-democrats-fundraising/. 
 
+#Fig. 3.
 ```{r}
 
 # by day
@@ -581,7 +598,7 @@ final_receipt_date_party_day <- final_receipt_date %>%
 ggplot(final_receipt_date_party_day, aes(x = as.Date(contribution_receipt_date)), y = fundraised, color = Party) +
   geom_line(aes(y = fundraised, color = Party)) +
   scale_x_date(limits = as.Date(c("2022-01-01", "2022-10-19"))) +
-  labs(title = "Fig. 1 Sum of Individual Contributions by Day for Federal Candidates \nof Each Party", 
+  labs(title = "Fig. 3 Sum of Individual Contributions by Day for Federal Candidates \nof Each Party", 
        x = "Day of Contribution", 
        y = "Contribution Amount ($)") +
   scale_color_manual(values = c("GOP" = "red", "DEM" = "blue")) +
@@ -593,8 +610,9 @@ ggplot(final_receipt_date_party_day, aes(x = as.Date(contribution_receipt_date))
   theme(panel.grid.major.y = element_line(color = "grey", size = 0.1))
 
 ```
-This graph shows the contributions each party brought in by day between 1/1/22 - 10/19/22. The largest spikes correspond with the EOQ deadlines as mentioned in (Fig 1?) Also included are the dates of major political shocks - notably the Dobbs decision happened near the end of Q2. The Democrats led that spike in fundraising and then continued the daily lead throughout the next quarter. Also, GOP fundraising did not catch up after the FBI raid on Mar-a-Lago - which became a large part of fundraising message from the GOP.
+Fig. 3 shows the contributions each party brought in by day between 1/1/22 - 10/19/22. The largest spikes correspond with the EOQ deadlines as mentioned in (Fig. 2) Also included are the dates of major political shocks - notably the Dobbs decision happened near the end of Q2. The Democrats led that spike in fundraising and then continued the daily lead throughout the next quarter. Also, GOP fundraising did not catch up after the FBI raid on Mar-a-Lago - which became a large part of fundraising message from the GOP.
 
+#Fig. 4.
 ```{r}
 
 # by week
@@ -606,7 +624,7 @@ final_receipt_date_party_week <- final_receipt_date %>%
 ggplot(final_receipt_date_party_week, aes(x = as.Date(paste(2022, week, 1, sep="-"), "%Y-%U-%u")), y = fundraised, color = Party) +
   geom_line(aes(y = fundraised, color = Party)) +
   scale_x_date(limits = as.Date(c("2022-01-01", "2022-10-19"))) +
-  labs(title = "Fig. 2 Sum of Individual Contributions by Week for Federal Candidates \nof Each Party", 
+  labs(title = "Fig. 4 Sum of Individual Contributions by Week for Federal Candidates \nof Each Party", 
        x = "Week of Contribution", 
        y = "Contribution Amount ($)") +
   scale_color_manual(values = c("GOP" = "red", "DEM" = "blue")) +
@@ -618,8 +636,9 @@ ggplot(final_receipt_date_party_week, aes(x = as.Date(paste(2022, week, 1, sep="
   theme(panel.grid.major.y = element_line(color = "grey", size = 0.1))
 
 ```
-This graph shows the weekly contributions to each party between 1/1/22 - 10/19/22. Democrats clearly held a fundraising advantage after the Dobbs leak for the rest of the cycle. While most spikes correlate between parties (when one party has a good week, so does the other), there are a few key moments shown where Democrats achieved smaller spikes without the smaller spikes from Republicans.
+Fig. 4 shows the weekly contributions to each party between 1/1/22 - 10/19/22. Democrats clearly held a fundraising advantage after the Dobbs leak for the rest of the cycle. While most spikes correlate between parties (when one party has a good week, so does the other), there are a few key moments shown where Democrats achieved smaller spikes without the smaller spikes from Republicans.
 
+#Fig. 5.
 ```{r}
 
 # look at only competitive districts
@@ -633,7 +652,7 @@ final_receipt_date_party_day_competitive <- final_receipt_date %>%
 ggplot(final_receipt_date_party_day_competitive, aes(x = as.Date(contribution_receipt_date)), y = fundraised, color = Party) +
   geom_line(aes(y = fundraised, color = Party)) +
   scale_x_date(limits = as.Date(c("2022-01-01", "2022-10-19"))) +
-  labs(title = "Fig. 3 Sum of Individual Contributions by Day for Federal Candidates \nof Each Party Running in Competitive Districts", 
+  labs(title = "Fig. 5 Sum of Individual Contributions by Day for Federal Candidates \nof Each Party Running in Competitive Districts", 
        x = "Day of Contribution", 
        y = "Contribution Amount ($)") +
   scale_color_manual(values = c("GOP" = "red", "DEM" = "blue")) +
@@ -645,8 +664,9 @@ ggplot(final_receipt_date_party_day_competitive, aes(x = as.Date(contribution_re
   theme(panel.grid.major.y = element_line(color = "grey", size = 0.1))
 
 ```
-This graph shows the contributions to candidates in competitive districts by party and day between 1/1/22 - 10/19/22. Competitive districts were determined based on the difference in vote share in the 2020 presidential election for each party, excluding any districts that were not within 10% points. Especially as the election came closer, the size of the fundraising gap in competitive districts between parties is more distinct. Democrats held the advantage in daily fundraising from the end of May, and the daily average continuously rising after July. However, due to the difference in the way the Democrats and Republicans fundraise, the discrepancy can be explained by Republicans relying more on outside spending. More analysis is needed to understand this dynamic.
+Fig. 5 shows the contributions to candidates in competitive districts by party and day between 1/1/22 - 10/19/22. Competitive districts were determined based on the difference in vote share in the 2020 presidential election for each party, excluding any districts that were not within 10% points. Especially as the election came closer, the size of the fundraising gap in competitive districts between parties is more distinct. Democrats held the advantage in daily fundraising from the end of May, and the daily average continuously rising after July. However, due to the difference in the way the Democrats and Republicans fundraise, the discrepancy can be explained by Republicans relying more on outside spending. More analysis is needed to understand this dynamic.
 
+#Fig. 6.
 ```{r}
 
 # look at only competitive districts
@@ -661,7 +681,7 @@ final_receipt_date_party_week_competitive <- final_receipt_date %>%
 ggplot(final_receipt_date_party_week_competitive, aes(x = as.Date(paste(2022, week, 1, sep="-"), "%Y-%U-%u")), y = fundraised, color = Party) +
   geom_line(aes(y = fundraised, color = Party)) +
   scale_x_date(limits = as.Date(c("2022-01-01", "2022-10-19"))) +
-  labs(title = "Sum of Individual Contributions by Week for Federal Candidates of \nEach Party Running in Competitive Districts", 
+  labs(title = "Fig. 6 Sum of Individual Contributions by Week for Federal Candidates of \nEach Party Running in Competitive Districts", 
        x = "Week of Contribution", 
        y = "Contribution Amount ($)") +
   scale_color_manual(values = c("GOP" = "red", "DEM" = "blue")) +
@@ -673,8 +693,9 @@ ggplot(final_receipt_date_party_week_competitive, aes(x = as.Date(paste(2022, we
   theme(panel.grid.major.y = element_line(color = "grey", size = 0.1))
 
 ```
-This graph shows the contributions to candidates in competitive districts by party and week between 1/1/22 - 10/19/22. When broken down to just competitive districts, the 2nd and 3rd EOQ spikes show a more distinctive gap between Dem and GOP fundraising - Democrats dominated individual contributions in these districts. 
+Fig. 6 shows the contributions to candidates in competitive districts by party and week between 1/1/22 - 10/19/22. When broken down to just competitive districts, the 2nd and 3rd EOQ spikes show a more distinctive gap between Dem and GOP fundraising - Democrats dominated individual contributions in these districts. 
 
+#Fig. 7.
 ```{r}
 
 # show the top fifteen candidates who fundraised the most for each party at each level of office
@@ -688,7 +709,7 @@ ggplot(final_top_house_dems, aes(x = total_fundraised_sum, y = reorder(Candidate
   geom_bar(stat="identity") +
   geom_text(aes(label=round(total_fundraised_sum / 1000000, 1)), hjust=-0.25) +
   scale_fill_gradient(low="lightblue",high="blue") +
-  labs(title = "Top Fundraisers Among House Democratic Candidates", 
+  labs(title = "Fig. 7 Top Fundraisers Among House Democratic Candidates", 
        x = "Contribution Amount ($)", 
        y = "Candidate Name") +
   guides(fill=guide_legend(title="Contribution Amount")) +
@@ -696,8 +717,9 @@ ggplot(final_top_house_dems, aes(x = total_fundraised_sum, y = reorder(Candidate
   theme_classic()
 
 ```
-This graph shows the 15 highest Democratic fundraisers running for the House in the 2022 Midterms. Most of the candidates were in competitive districts - which explains the wider gap in fundraising by party in competitive districts in Fig 5. Katie Porter (CA-45), the highest fundraiser on this visual, is one of the most well known members of the Democratic caucus. She has a strong national presence and a strong social media following - she also was in a competitive race with a pro-life Republican candidate (https://www.latimes.com/politics/story/2022-10-20/2022-california-midterm-election-porter-baugh-abortion-economy-environment). 4 out of the 15 candidates shown narrowly lost their race. 
+Fig. 7 shows the 15 highest Democratic fundraisers running for the House in the 2022 Midterms. Most of the candidates were in competitive districts - which explains the wider gap in fundraising by party in competitive districts in Fig 5. Katie Porter (CA-45), the highest fundraiser on this visual, is one of the most well known members of the Democratic caucus. She has a strong national presence and a strong social media following - she also was in a competitive race with a pro-life Republican candidate (https://www.latimes.com/politics/story/2022-10-20/2022-california-midterm-election-porter-baugh-abortion-economy-environment). 4 out of the 15 candidates shown narrowly lost their race. 
 
+#Fig. 8.
 ```{r}
 
 # show the top fifteen candidates who fundraised the most for each party at each level of office
@@ -711,7 +733,7 @@ ggplot(final_top_house_gop, aes(x = total_fundraised_sum, y = reorder(Candidate,
   geom_bar(stat="identity") +
   geom_text(aes(label=round(total_fundraised_sum / 1000000, 1)), hjust=-0.25) +
   scale_fill_gradient(low="lightcoral",high="red") +
-  labs(title = "Top Fundraisers Among House Republican Candidates", 
+  labs(title = "Fig. 8 Top Fundraisers Among House Republican Candidates", 
        x = "Contribution Amount ($)", 
        y = "Candidate Name") +
   guides(fill=guide_legend(title="Contribution Amount")) +
@@ -719,7 +741,9 @@ ggplot(final_top_house_gop, aes(x = total_fundraised_sum, y = reorder(Candidate,
   theme_classic()
 
 ```
+Fig. 8 shows the 15 highest Democratic fundraisers running for the House in the 2022 Midterms. Most of the candidates were in competitive districts - which explains the wider gap in fundraising by party in competitive districts in Fig 7. Katie Porter (CA-45), the highest fundraiser on this visual, is one of the most well known members of the Democratic caucus. She has a strong national presence and a strong social media following - she also was in a competitive race with a pro-life Republican candidate (https://www.latimes.com/politics/story/2022-10-20/2022-california-midterm-election-porter-baugh-abortion-economy-environment). 4 out of the 15 candidates shown narrowly lost their race. 
 
+#Fig. 9.
 ```{r}
 
 # show the top fifteen candidates who fundraised the most for each party at each level of office
@@ -733,7 +757,7 @@ ggplot(final_top_senate_dems, aes(x = total_fundraised_sum, y = reorder(Candidat
   geom_bar(stat="identity") +
   geom_text(aes(label=round(total_fundraised_sum / 1000000, 1)), hjust=-0.25) +
   scale_fill_gradient(low="lightblue",high="blue") +
-  labs(title = "Top Fundraisers Among Senate Democratic Candidates", 
+  labs(title = "Fig. 9 Top Fundraisers Among Senate Democratic Candidates", 
        x = "Contribution Amount ($)", 
        y = "Candidate Name") +
   guides(fill=guide_legend(title="Contribution Amount")) +
@@ -741,7 +765,9 @@ ggplot(final_top_senate_dems, aes(x = total_fundraised_sum, y = reorder(Candidat
   theme_classic()
 
 ```
+Fig. 9 shows the 15 highest Democratic fundraisers running for Senate in the 2022 Midterm Election. This graph shows almost exclusively senate seats that were at least slightly competitive. 5 out of the 15 candidates lost their election - most notably the 3rd highest fundraiser Val Demmings losing by 16 points to Marco Rubio.  Meanwhile Mandala Barnes, the Democratic challenger in Wisconsin, lost by just 1 point, despite his opponent Ron Johnson being the highest Republican fundraiser (Fig 10). Each senate election by state has different factors that influence not only how much money comes in - but how effective it is in effecting the final vote count.
 
+Fig. 10.
 ```{r}
 
 # show the top fifteen candidates who fundraised the most for each party at each level of office
@@ -755,7 +781,7 @@ ggplot(final_top_senate_gop, aes(x = total_fundraised_sum, y = reorder(Candidate
   geom_bar(stat="identity") +
   geom_text(aes(label=round(total_fundraised_sum / 1000000, 1)), hjust=-0.25) +
   scale_fill_gradient(low="lightcoral",high="red") +
-  labs(title = "Top Fundraisers Among Senate Republican Candidates", 
+  labs(title = "Fig. 10 Top Fundraisers Among Senate Republican Candidates", 
        x = "Contribution Amount ($)", 
        y = "Candidate Name") +
   guides(fill=guide_legend(title="Contribution Amount")) +
@@ -763,7 +789,9 @@ ggplot(final_top_senate_gop, aes(x = total_fundraised_sum, y = reorder(Candidate
   theme_classic()
 
 ```
+Fig. 10 shows the 15 highest Republican fundraisers running for Senate in the 2022 Midterm Election. The top Republican fundraiser Ron Johnson raised less than half then the top 2 Democratic fundraisers, Kelly and Warnock - as Republicans rely more on Super Pacs than individual contributions. Johnson raised about $1.1m less than his opponent Mandela Barnes. It’s also interesting how large the fundraising discrepancy is between the candidates in extremely competitive districts. Walker, Oz, Vance, and Masters were all in battleground states from 2020 so we would expect their fundraising would be stronger. Vance, who raised the least of those 4 candidates, was the only one to win his Senate bid - despite Tim Ryan outraising him 3 to 1. It’s also interesting that two of the highest fundraisers, Murkowski and Tshibaka, were actually opponents in the Alaska Senate election - Murkowski, the incumbent who raised about 20-25% more, won.
 
+#Fig. 11.
 ```{r}
 
 # look at where contributions originated and went to by state and by party
@@ -785,16 +813,17 @@ joined_state_dem_m <- melt(joined_state_dem[,c('State',"Destination Contribution
 
 ggplot(joined_state_dem_m, aes(x = value, y = reorder(State, value))) +
   geom_bar(aes(fill = variable), stat="identity", position = "dodge") +
-  labs(title = "Top 10 States by Fundraising Amount for Democratic Candidates", 
+  labs(title = "Fig. 11 Top 10 States by Fundraising Amount for Democratic Candidates", 
        x = "Contribution Amount ($)", 
        y = "State") +
   scale_x_continuous(labels=scales::comma) +
   guides(fill=guide_legend(title="")) +
   theme_classic()
 
-
 ```
+Fig. 11 shows the top 10 states that donated to Democratic candidates this cycle with the amount contributed by donors within the state in cyan and the amount raised by candidates running in the state in orange. California was by far the state with the most amount fundraised by donors living in the state, much in part due to the high population of the state as well as Democrats being viewed more favorably there. California also had relatively high fundraising numbers for candidates running in the state, but can most likely be attributed to the high number of house races in the state. States like Arizona, Georgia, Pennsylvania, Ohio, Nevada, and Wisconsin had relatively high fundraising amounts compared to the amount of donations that originated there, which makes sense given that these are battleground states with highly contested races.
 
+#Fig 12.
 ```{r}
 
 # For Republican candidates
@@ -806,7 +835,7 @@ joined_state_dem_m <- melt(joined_state_dem[,c('State',"Destination Contribution
 
 ggplot(joined_state_dem_m, aes(x = value, y = reorder(State, value))) +
   geom_bar(aes(fill = variable), stat="identity", position = "dodge") +
-  labs(title = "Top 10 States by Fundraising Amount for Republican Candidates", 
+  labs(title = "Fig. 12 Top 10 States by Fundraising Amount for Republican Candidates", 
        x = "Contribution Amount ($)", 
        y = "State") +
   scale_x_continuous(labels=scales::comma) +
@@ -814,6 +843,7 @@ ggplot(joined_state_dem_m, aes(x = value, y = reorder(State, value))) +
   theme_classic()
 
 ```
+Fig. 12's visual shows the top 10 states that donated to Republican candidates this cycle with the amount contributed by donors within the state in cyan and the amount raised by candidates running in the state in orange. Republicans had high origin contribution amounts from populous states like Florida, California, and Texas. Similar to Democrats, Arizona, Georgia, Pennsylvania, Wisconsin, and Ohio saw a higher amount fundraised by candidates running in those states than fundraised from contributors living in those states.
 
 
 ### Analysis
@@ -852,7 +882,6 @@ summary(senate_model)
 plot(senate_model)
 
 ```
-
 
 ```{r}
 
@@ -984,4 +1013,31 @@ fviz_screeplot(pca_competitive)
 
 This section summarizes the results and may briefly outline advantages and limitations of the work presented.
 
+
+
+
 ## References
+Open Secrets (2003), Election Overview: Cost of the Election. Washington, DC: Center for Responsive Politics. https://www.opensecrets.org/elections-overview/cost-of-election
+
+Open Secrets (2003), Election Overview: Did Money Win?. Washington, DC: Center for Responsive Politics.
+https://www.opensecrets.org/elections-overview/winning-vs-spending
+
+New York Times (2022), House Election Tracker https://www.nytimes.com/news-event/2022-midterm-elections
+
+New York Times (2022), Senate Election Tracker https://www.nytimes.com/news-event/2022-midterm-elections
+
+Politico (2022), Read Justice Alito's initial draft abortion opinion which would overturn Roe v. Wade
+https://www.politico.com/news/2022/05/02/read-justice-alito-initial-abortion-opinion-overturn-roe-v-wade-pdf-00029504 
+
+Supreme Court Dobbs Decision
+https://www.supremecourt.gov/opinions/21pdf/19-1392_6j37.pdf 
+
+United States (1997). U.S. Federal Election Commission FEC
+https://www.fec.gov/data
+
+Dave’s Redistricting App
+https://davesredistricting.org/maps#home
+
+Scherer, M. (2022). Democrats sound alarms about funding in battle for House majority. The Washington Post. https://www.washingtonpost.com/politics/2022/10/07/house-democrats-fundraising/ 
+
+Fry, H. (2022). Where do rep. Katie Porter and Scott Baugh stand on abortion, inflation, immigration? Los Angeles Times. https://www.latimes.com/politics/story/2022-10-20/2022-california-midterm-election-porter-baugh-abortion-economy-environment 
