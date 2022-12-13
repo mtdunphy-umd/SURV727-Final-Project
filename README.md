@@ -1,5 +1,12 @@
 # SURV727-Final-Project
 
+## Reproducibility Notes
+The repository can be downloaded and 'SURV727 - Group 2 Final Paper.Rmd' can be run to reproduce analysis. All input data can be found in the 'Input Data' folder and all data sets genereated from the R markdown folder can be found in the 'Output Data' folder. Due to the size of the FEC receipt data, bulk receipt data sets were not included in github repository, but can be viewed and downloaded here:
+  - FEC bulk data: https://drive.google.com/drive/folders/172eM7HDJ1CMVMPgpaN74dY3bzY9piSsz?usp=sharing
+  - FEC state receipt data: https://drive.google.com/drive/folders/10LzNSv9ucwlUsFGJbJP6nx2qP5cVkLFJ?usp=sharing
+
+These folders can be downloaded and added as folders (with the same exact name) to the 'Input Data' folder to run the R markdown file.
+
 ## Introduction
 Since 2010 and the controversial decision of Citizens United vs. Federal Election Commission (FEC), the amount of money spent on political campaigns has risen exponentially. In 2010, a midterm election where infamously Republicans picked up a half dozen seats in the Senate and more than 60 seats in the House, political expenditures totaled around 3.6 billion dollars. In 2022, that number is projected to be around $8.9B. (https://www.opensecrets.org/elections-overview/cost-of-election?cycle=2020&display=T&infl=N)
 
