@@ -1,7 +1,7 @@
 # SURV727-Final-Project
 
 ## Reproducibility Notes
-The repository can be downloaded and 'SURV727 - Group 2 Final Paper.Rmd' can be run to reproduce analysis. All input data can be found in the 'Input Data' folder and all data sets genereated from the R markdown folder can be found in the 'Output Data' folder. Due to the size of the FEC receipt data, bulk receipt data sets were not included in github repository, but can be viewed and downloaded here:
+The repository can be downloaded and 'SURV727 - Group 2 Final Paper.Rmd' can be run to reproduce analysis. All input data can be found in the 'Input Data' folder and all data sets genereated from the R markdown folder can be found in the 'Output Data' folder. Due to the size of the FEC receipt data, bulk receipt data sets were not included in the github repository, but can be viewed and downloaded here:
   - FEC bulk data: https://drive.google.com/drive/folders/172eM7HDJ1CMVMPgpaN74dY3bzY9piSsz?usp=sharing
   - FEC state receipt data: https://drive.google.com/drive/folders/10LzNSv9ucwlUsFGJbJP6nx2qP5cVkLFJ?usp=sharing
 
