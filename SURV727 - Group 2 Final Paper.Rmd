@@ -1,12 +1,15 @@
 ---
 title: "Fundamentals of Computing and Data Display"
-subtitle: "Group 2 Term Paper"
 author: "Michael Dunphy, Niall Johnson"
 date: "`r Sys.Date()`"
 output:
+  html_document:
+    toc: yes
+    df_print: paged
   pdf_document:
     toc: yes
     df_print: kable
+subtitle: Group 2 Term Paper
 ---
 
 ```{r, include = FALSE}
@@ -34,13 +37,11 @@ wd <- getwd()
 
 ## Introduction
 
-Since 2010 and the controversial decision of Citizens United vs. FEC, the amount of money spent on political campaigns has risen exponentially. In 2010, a midterm election where infamously Republicans picked up a half dozen seats in the Senate and more than 60 seats in the House, political expenditures totaled around 3.6B. In 2022, that number is projected to be around $8.9B. (https://www.opensecrets.org/elections-overview/cost-of-election?cycle=2020&display=T&infl=N)
+Since 2010 and the controversial decision of Citizens United vs. Federal Election Commission (FEC), the amount of money spent on political campaigns has risen exponentially. In 2010, a midterm election where infamously Republicans picked up a half dozen seats in the Senate and more than 60 seats in the House, political expenditures totaled around 3.6 billion dollars. In 2022, that number is projected to be around $8.9B. (https://www.opensecrets.org/elections-overview/cost-of-election?cycle=2020&display=T&infl=N)
 
 Candidates with more money win more often, so fundraising has become a critical indicator of election forecasting and understanding the current political climate. (https://www.opensecrets.org/elections-overview/winning-vs-spending)
 
-Major partisan events that dominate the greater political discussion often cause a mass influx of capital to political campaigns. With each fundraising cycle there are candidates that perform worse or better based on candidate quality and the overall political climate. Our goal is to identify those trends in contributions that correlate with significant political shocks during the 2022 midterm cycle, as well as identify characteristics of candidates that affected fundraising performance. In our analysis, we build a linear model to identify those candidates that were above or below fundraising expectations - controlling for the characteristics of candidates and their districts. We conduct principal component analysis to identify which variables are the most predictive for our model. We also utilize data visualizations such as highest fundraising performance by party and office and plotting fundraising numbers over time through the 2022 election cycle.
-
-Our goal is to identify trends in contributions that correlate with significant political shocks during the 2022 midterm cycle as well as identify characteristics of candidates that affected fundraising performance.
+Major partisan events that dominate the greater political discussion often cause a mass influx of money to political campaigns. With each fundraising cycle there are candidates that perform above and below expectations based on candidate quality and the overall political climate. Our goal is to identify those trends in contributions that correlate with significant political shocks during the 2022 midterm cycle, as well as identify characteristics of candidates that affected fundraising performance. In our analysis, we build 3 linear models to identify which characteristics were significant in fundraising among house candidates, senate candidates, and candidates running in competitive districts. We also build 3 logistic models predicting change of win in the general election among the same groups - controlling for the characteristics of their districts. We conduct principal component analysis to identify which variables are the most predictive for our model. We also utilize data visualizations such as comparing top fundraisers by party and office. We also plot fundraising numbers over time through the 2022 election year by day and week.
 
 ## Data
 
@@ -106,11 +107,11 @@ csv_files <- list.files(folder, pattern = "*.csv")
 df_list <- list()
 for (file in csv_files) {
   df <- read_csv(file.path(folder, file), show_col_types = FALSE) %>%
-          mutate(across(everything(), as.character))
+          mutate_all(as.character)
   df_list[[file]] <- df
 }
 
-fec_receipts_combined <- bind_rows(df_list)
+fec_receipts_combined <- dplyr::bind_rows(df_list)
 write.csv(fec_receipts_combined, paste(wd, "/output data/", "fec_receipts_combined.csv", sep=''))
 
 # to link candidates to their committees, FEC provides a bulk data set that can be found here under 'Candidate-committee linkages': https://www.fec.gov/data/browse-data/?tab=bulk-data
@@ -355,7 +356,7 @@ write.csv(matched_candidates_processed_trimmed, paste(wd, "/output data/", "matc
 
 FEC receipt processing
 ```{r, include = FALSE}
-
+detach(package:plyr)
 # FEC receipt processing
 # create a trimmed data set for joining purposes
 fec_receipts_combined.trimmed <- fec_receipts_combined %>%
@@ -365,9 +366,9 @@ head(fec_receipts_combined.trimmed)
 write.csv(fec_receipts_combined.trimmed, paste(wd, "/output data/", "fec_receipts_combined.trimmed.csv", sep=''))
 
 # get contribution totals for each committee id 
-fec_receipts_grouped <- fec_receipts_combined %>%
+fec_receipts_grouped <- as.data.frame(fec_receipts_combined) %>%
                           group_by(committee_id) %>%
-                          summarise(total_fundraised = sum(as.double(contribution_receipt_amount)))
+                          summarize(total_fundraised = sum(as.double(contribution_receipt_amount)))
 head(fec_receipts_grouped)
 
 write.csv(fec_receipts_grouped, paste(wd, "/output data/", "fec_receipts_grouped.csv", sep=''))
@@ -520,6 +521,7 @@ This section presents the main results.
 
 ### Data exploration
 
+In this section, we conduct exploratory data analysis to better understand the data. This includes visualizing keyword trends using google trends, plotting fundraising amounts overtime, comparing top fundraising candidates for each party, and compare origin and destination contribution amounts by state.
 
 ```{r}
 
@@ -553,13 +555,14 @@ head(final_competitive)
 ```
 #Fig. 1.
 ```{r}
+
 require(gtrendsR)
 Gtrenddata2022 <- gtrends(c("Abortion", "Trump", "Supreme Court", "Crime", "FBI"), 
                geo = "US", time = "2022-01-01 2022-12-01",onlyInterest = TRUE)
 
 plot(Gtrenddata2022)
 ```
-Fig. 1 tracks the number of Google searches related to the terms Abortion, Crime, FBI, Supreme Court, Trump over the last year. These terms generally reflect the issues that were salient during the 2022 election. Abortion and Trump were most prevalent in the public's mind reflected by the most US Google search hits. Both Abortion and Supreme Court spike around the time of the Dobb's decision that overturned Roe v. Wade. The spike in both FBI and Trump coincides with the Mar-a-Lago raid in early September. Crime was another major issue with voters in the election, yet we don't see large changes in the amount people searched Google for crime related topics. We also tested Economy, and it had a similar trend as crime, but with less hits.
+Fig. 1 tracks the number of Google searches related to the terms 'Abortion', 'Crime', 'FBI', 'Supreme Court', and 'Trump' over the last year. These terms generally reflect the issues that were salient during the 2022 election. Abortion and Trump were most prevalent in the public's mind reflected by the most US Google search hits. Both Abortion and Supreme Court spike around the time of the Dobb's decision that overturned Roe v. Wade. The spike in both FBI and Trump coincides with the Mar-a-Lago raid in early September. Crime was another major issue with voters in this election, yet we don't see large changes in the amount people searched on Google for crime related topics. We also tested 'economy', and it had a similar trend as 'crime', but with less hits.
 
 #Fig. 2.
 ```{r}
@@ -585,7 +588,7 @@ ggplot(final_receipt_date_party_cumulative, aes(x = as.Date(contribution_receipt
   theme(panel.grid.major.y = element_line(color = "grey", size = 0.1))
 
 ```
-Fig. 2 is the cumulative sum of all contributions from 1/1/22 - 10/19/22. You can see both parties spiked at the end of quarter deadlines - at the end of a disclosure period, each campaign has to publicly release their fundraising report for that quarter. Candidates tend to push to bring in as much money as they can so when their records are released they can show fundraising momentum. While both parties spike at EOQ deadlines, the Democrats clearly outperformed the Republicans after Q1. This could be in part due to the fact the Democrats rely more on individual contributions than Republicans - who tend to make up the shortfall in candidate fundraising by spending millions of dollars from outside groups https://www.washingtonpost.com/politics/2022/10/07/house-democrats-fundraising/. 
+Fig. 2 is the cumulative sum of all contributions from 1/1/22 - 10/19/22. You can see both parties spiked at the end of quarter deadlines - at the end of a disclosure period, each campaign has to publicly release their fundraising report for that quarter. Candidates tend to push to bring in as much money as they can so when their records are released they can show fundraising momentum. While both parties spike at EOQ deadlines, the Democrats clearly outperformed the Republicans after Q1. This could be in part due to the fact the Democrats rely more on individual contributions than Republicans - who tend to make up the shortfall in candidate fundraising by large spending from outside groups (https://www.washingtonpost.com/politics/2022/10/07/house-democrats-fundraising/). 
 
 #Fig. 3.
 ```{r}
@@ -610,7 +613,7 @@ ggplot(final_receipt_date_party_day, aes(x = as.Date(contribution_receipt_date))
   theme(panel.grid.major.y = element_line(color = "grey", size = 0.1))
 
 ```
-Fig. 3 shows the contributions each party brought in by day between 1/1/22 - 10/19/22. The largest spikes correspond with the EOQ deadlines as mentioned in (Fig. 2) Also included are the dates of major political shocks - notably the Dobbs decision happened near the end of Q2. The Democrats led that spike in fundraising and then continued the daily lead throughout the next quarter. Also, GOP fundraising did not catch up after the FBI raid on Mar-a-Lago - which became a large part of fundraising message from the GOP.
+Fig. 3 shows the contributions each party brought in by day between 1/1/22 - 10/19/22. The largest spikes correspond with the EOQ deadlines as mentioned in Fig. 2. Also included are the dates of major political shocks - notably the Dobbs decision happened near the end of Q2. The Democrats led that spike in fundraising and then continued the daily lead throughout the next quarter. Also, GOP fundraising did not catch up after the FBI raid on Mar-a-Lago - which became a large part of the fundraising message from the GOP around that time.
 
 #Fig. 4.
 ```{r}
@@ -636,7 +639,7 @@ ggplot(final_receipt_date_party_week, aes(x = as.Date(paste(2022, week, 1, sep="
   theme(panel.grid.major.y = element_line(color = "grey", size = 0.1))
 
 ```
-Fig. 4 shows the weekly contributions to each party between 1/1/22 - 10/19/22. Democrats clearly held a fundraising advantage after the Dobbs leak for the rest of the cycle. While most spikes correlate between parties (when one party has a good week, so does the other), there are a few key moments shown where Democrats achieved smaller spikes without the smaller spikes from Republicans.
+Fig. 4 shows the weekly contributions to each party between 1/1/22 - 10/19/22. Democrats clearly held a fundraising advantage after the Dobbs leak for the rest of the cycle. While most spikes correlate between parties (when one party has a good week, so does the other), there are a few key moments shown where Democrats achieved smaller spikes without seeing a similar trend among Republican candidate fundraising.
 
 #Fig. 5.
 ```{r}
@@ -664,7 +667,7 @@ ggplot(final_receipt_date_party_day_competitive, aes(x = as.Date(contribution_re
   theme(panel.grid.major.y = element_line(color = "grey", size = 0.1))
 
 ```
-Fig. 5 shows the contributions to candidates in competitive districts by party and day between 1/1/22 - 10/19/22. Competitive districts were determined based on the difference in vote share in the 2020 presidential election for each party, excluding any districts that were not within 10% points. Especially as the election came closer, the size of the fundraising gap in competitive districts between parties is more distinct. Democrats held the advantage in daily fundraising from the end of May, and the daily average continuously rising after July. However, due to the difference in the way the Democrats and Republicans fundraise, the discrepancy can be explained by Republicans relying more on outside spending. More analysis is needed to understand this dynamic.
+Fig. 5 shows the contributions to candidates in competitive districts by party and day between 1/1/22 - 10/19/22. Competitive districts were determined based on the difference in vote share in the 2020 presidential election for each party, excluding any districts that were not within 10% points. Especially as the election came closer, the size of the fundraising gap in competitive districts between parties is more distinct. Democrats held the advantage in daily fundraising from the end of May forward. However, due to the difference in the way the Democrats and Republicans fundraise, the discrepancy can be explained by Republicans relying more on outside spending. More analysis and data on PAC contributions is needed to understand this dynamic.
 
 #Fig. 6.
 ```{r}
@@ -717,7 +720,7 @@ ggplot(final_top_house_dems, aes(x = total_fundraised_sum, y = reorder(Candidate
   theme_classic()
 
 ```
-Fig. 7 shows the 15 highest Democratic fundraisers running for the House in the 2022 Midterms. Most of the candidates were in competitive districts - which explains the wider gap in fundraising by party in competitive districts in Fig 5. Katie Porter (CA-45), the highest fundraiser on this visual, is one of the most well known members of the Democratic caucus. She has a strong national presence and a strong social media following - she also was in a competitive race with a pro-life Republican candidate (https://www.latimes.com/politics/story/2022-10-20/2022-california-midterm-election-porter-baugh-abortion-economy-environment). 4 out of the 15 candidates shown narrowly lost their race. 
+Fig. 7 shows the 15 highest Democratic fundraisers running for the House in the 2022 Midterms. Most of the candidates were in competitive districts - which explains the wider gap in fundraising by party in these districts in Fig 5. Katie Porter (CA-45), the highest fundraiser on this visual, is one of the most well known members of the Democratic caucus. She has a high national presence and a strong social media following - she also was in a competitive race with a pro-life Republican candidate (https://www.latimes.com/politics/story/2022-10-20/2022-california-midterm-election-porter-baugh-abortion-economy-environment). 4 out of the 15 candidates shown narrowly lost their races. 
 
 #Fig. 8.
 ```{r}
@@ -741,7 +744,7 @@ ggplot(final_top_house_gop, aes(x = total_fundraised_sum, y = reorder(Candidate,
   theme_classic()
 
 ```
-Fig. 8 shows the 15 highest Democratic fundraisers running for the House in the 2022 Midterms. Most of the candidates were in competitive districts - which explains the wider gap in fundraising by party in competitive districts in Fig 7. Katie Porter (CA-45), the highest fundraiser on this visual, is one of the most well known members of the Democratic caucus. She has a strong national presence and a strong social media following - she also was in a competitive race with a pro-life Republican candidate (https://www.latimes.com/politics/story/2022-10-20/2022-california-midterm-election-porter-baugh-abortion-economy-environment). 4 out of the 15 candidates shown narrowly lost their race. 
+Fig. 8 shows the 15 highest Republican fundraisers running for the House in the 2022 Midterm Election. Most of the candidates shown maintain some sort of presence in the GOP mainstream - Kevin McCarthy, the minority leader, is most likely going to be speaker of the House in January, Elise Stefanik is a rising star in GOP ranks maneuvering from a moderate freshman Republican to ousting Liz Cheny for 3rd in GOP House Leadership, and Jim Jordan one of the most outspoken Trump loyalists. Harriet Hageman, the Trump Loyalist GOP challenger who defeated Cheney in her primary in Wyoming was the 5th highest fundraiser - despite never holding federal office. Interestingly, Republican candidates of color (James, Kim, Ciscomani, Steel…) were all leaders in GOP house candidate fundraising. 
 
 #Fig. 9.
 ```{r}
@@ -765,7 +768,7 @@ ggplot(final_top_senate_dems, aes(x = total_fundraised_sum, y = reorder(Candidat
   theme_classic()
 
 ```
-Fig. 9 shows the 15 highest Democratic fundraisers running for Senate in the 2022 Midterm Election. This graph shows almost exclusively senate seats that were at least slightly competitive. 5 out of the 15 candidates lost their election - most notably the 3rd highest fundraiser Val Demmings losing by 16 points to Marco Rubio.  Meanwhile Mandala Barnes, the Democratic challenger in Wisconsin, lost by just 1 point, despite his opponent Ron Johnson being the highest Republican fundraiser (Fig 10). Each senate election by state has different factors that influence not only how much money comes in - but how effective it is in effecting the final vote count.
+Fig. 9 shows the 15 highest Democratic fundraisers running for Senate in the 2022 Midterm Election. This graph shows almost exclusively senate seats that were at least slightly competitive. 5 out of the 15 candidates lost their election - most notably the 3rd highest fundraiser Val Demmings losing by 16 points to Marco Rubio in Florida.  Meanwhile Mandala Barnes, the Democratic challenger in Wisconsin, lost by just 1 point, despite his opponent Ron Johnson being the highest Republican fundraiser this cycle (Fig 10). Each senate election by state has different factors that influence not only how much money comes in, but how much it affects the final vote count.
 
 Fig. 10.
 ```{r}
@@ -843,7 +846,7 @@ ggplot(joined_state_dem_m, aes(x = value, y = reorder(State, value))) +
   theme_classic()
 
 ```
-Fig. 12's visual shows the top 10 states that donated to Republican candidates this cycle with the amount contributed by donors within the state in cyan and the amount raised by candidates running in the state in orange. Republicans had high origin contribution amounts from populous states like Florida, California, and Texas. Similar to Democrats, Arizona, Georgia, Pennsylvania, Wisconsin, and Ohio saw a higher amount fundraised by candidates running in those states than fundraised from contributors living in those states.
+Fig. 12's visual shows the top 10 states that donated to Republican candidates this cycle with the amount contributed by donors within the state in cyan, and the amount raised by candidates running in the state in orange. Republicans had high origin contribution amounts from populous states like Florida, California, and Texas. Similar to Democrats, Arizona, Georgia, Pennsylvania, Wisconsin, and Ohio saw a higher amount fundraised by candidates running in those states than fundraised from contributors living in those states.
 
 
 ### Analysis
@@ -858,6 +861,7 @@ house_model <- glm(total_fundraised_sum ~ . - Candidate - State - State_processe
 summary(house_model)
 
 ```
+In this model looking at House candidates, Party Committee and Emily's List endorsements as well as win status were found to be statistically significant at 95% confidence in increasing fundraising for the candidate. Native American status is statistically significant at 90% confidence.
 
 ```{r}
 
@@ -865,7 +869,6 @@ summary(house_model)
 plot(house_model)
 
 ```
-
 
 ```{r}
 
@@ -875,6 +878,7 @@ senate_model <- glm(total_fundraised_sum ~ . - Candidate - State_processed - Sta
 summary(senate_model)
 
 ```
+This model shows that among Senate candidates, being endorsed by Emily’s List was found to be the only statistically significant influence on fundraising, to the 95% confidence level.
 
 ```{r}
 
@@ -891,6 +895,7 @@ competitive_model <- glm(total_fundraised_sum ~ . - Candidate - State - State_pr
 summary(competitive_model)
 
 ```
+Among competitive districts, only Senator status was found to be statistically significant with incumbency status having a p-value lower than 0.1, but not low enough to be significant at 95% confidence.
 
 ```{r}
 
@@ -908,6 +913,7 @@ house_model2 <- glm(Winner.Num ~ . - Candidate - State - State_processed - Distr
 summary(house_model2)
 
 ```
+This model shows what characteristics affect House candidate’s chances of winning. GOP candidates, incumbents, total fundraised and Pres. 2020 variables were found to be statistically significant at 95% confidence.
 
 ```{r}
 
@@ -915,7 +921,6 @@ summary(house_model2)
 plot(house_model2)
 
 ```
-
 
 ```{r}
 
@@ -925,6 +930,7 @@ senate_model2 <- glm(Winner.Num ~ . - Candidate - State - State_processed - Part
 summary(senate_model2)
 
 ```
+This model among Senate candidates shows no variables were statistically significant in predicting winning outcome. This is most likely due in part to low N observations.
 
 ```{r}
 
@@ -942,6 +948,7 @@ competitive_model2 <- glm(Winner.Num ~ . - Candidate - State - State_processed -
 summary(competitive_model2)
 
 ```
+Among competitive districts, incumbency status, presidential vote share in 2020, GOP status, Latino status, and percentage white in district, were found to be statistically significant at 95% confidence in predicting win.
 
 ```{r}
 
@@ -965,11 +972,8 @@ pca_house <- prcomp(x = final_house_pca,
 summary(pca_house)
 fviz_screeplot(pca_house)
 
-#pca$rotation[, 1:3]
-#var <- get_pca_var(pca)
-#corrplot(var$cos2, is.corr = FALSE)
-
 ```
+All 10 dimensions explain portion of variance around 5% or greater with dimensions 9 and 10 being slightly lower.
 
 ```{r}
 
@@ -984,11 +988,8 @@ pca_senate <- prcomp(x = final_senate_pca,
 summary(pca_senate)
 fviz_screeplot(pca_senate)
 
-#pca$rotation[, 1:3]
-#var <- get_pca_var(pca)
-#corrplot(var$cos2, is.corr = FALSE)
-
 ```
+All 10 dimensions explain portion of variance around 5% or greater with dimensions 9 and 10 being slightly lower.
 
 ```{r}
 
@@ -1003,17 +1004,20 @@ pca_competitive <- prcomp(x = final_competitive_pca,
 summary(pca_competitive)
 fviz_screeplot(pca_competitive)
 
-#pca$rotation[, 1:3]
-#var <- get_pca_var(pca)
-#corrplot(var$cos2, is.corr = FALSE)
-
 ```
+All 10 dimensions explain portion of variance around 5% or greater with dimensions 9 and 10 being slightly lower.
 
 ## Discussion
 
 This section summarizes the results and may briefly outline advantages and limitations of the work presented.
 
+Between the two parties, Democrats had a better fundraising performance from individual contributions in the 2022 Midterm Election. We saw a distinct gap between fundraising trends after abortion became a more salient political issue. Before the Dobbs leak on May 2nd, 2022, both parties were fundraising at about the same rate. For Democrats, while the Dobbs decision was a blow to their greater agenda, it was a watershed moment for their fundraising. Presidential approval rating was low, the global markets had been turbulent, and inflation was at record highs - enthusiasm for fundraising was low. However, Dobbs gave Democrats a unifying rallying call in their messaging that changed the trajectory of their fundraising - and in turn their chances to win. 
 
+A plurality of Democratic candidates ran on the message of Choice, and as was seen with the Kansas abortion referendum and Democratic over performance in key special elections in Alaska, Wisconsin and New York. In our results, an endorsement from Emily’s List, a pro-choice woman organization, significantly improved fundraising numbers for those candidates. High fundraising is indicative of a greater chance of winning, so every year candidate’s are striving to raise more than ever. Based on these trends, Democrats' over performance in fundraising in the months leading up to the elections, also indicated the potential of over performing election expectations - despite the fundamentals being against them (Pres. Approval, Economy, and Party out-of-power midterm advantage).
+
+One of the advantages of our work is being able to identify key candidate characteristics for the primaries, such as endorsements, fundraising numbers, district characteristics, and candidate demographics. It also allows us to look at both fundraising expectations and expectations of winning the election. Some of the disadvantages we found were that the FEC data did not include the final weeks of the election cycle. Also, the FEC only has reporting for individuals contributing over $200 and not all PAC money is included. The FEC API was difficult to incorporate into our analysis given its complications in processing the relevant information we needed. Even the FEC website interface itself was difficult to manage. If the API had worked, it would have streamlined our data collection process and made it easier to analyze updated FEC data.
+
+Given the fact that the Dobbs decision happened near the end of a fundraising quarter, another disadvantage is that it is harder to clearly distinguish the full “Dobbs effect” from the general EOQ fundraising trends. If we had more time we would have further removed outliers and optimized our models, making sure we’re watching for variance - and using the results of PCA to fine tune our model. Some further research we could do includes: checking the vote margins for the 2022 election compared to past cycles, updating our analysis once FEC reports are finalized (data past Oct 19th), research on fundraising language and methods used by each candidate to see the prevalence of keywords related to major political shocks and to see which methods were more effective. The 2022 midterm election cycle was unique in political history and more research on this election cycle may provide meaningful insight into future elections.
 
 
 ## References
@@ -1041,3 +1045,5 @@ https://davesredistricting.org/maps#home
 Scherer, M. (2022). Democrats sound alarms about funding in battle for House majority. The Washington Post. https://www.washingtonpost.com/politics/2022/10/07/house-democrats-fundraising/ 
 
 Fry, H. (2022). Where do rep. Katie Porter and Scott Baugh stand on abortion, inflation, immigration? Los Angeles Times. https://www.latimes.com/politics/story/2022-10-20/2022-california-midterm-election-porter-baugh-abortion-economy-environment 
+
+FiveThiryEight (2022) Primary Project 2022 https://github.com/fivethirtyeight/data/tree/master/primary-project-2022
