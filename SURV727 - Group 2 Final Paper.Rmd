@@ -57,7 +57,7 @@ District level data was provided by [Dave’s Redistricting App](https://davesre
 
 Election result data was manually collected for the [New York Times Midterm Tracker](https://www.nytimes.com/interactive/2022/11/08/us/elections/results-senate.html?action=click&pgtype=Article&state=default&module=election-results&context=election_recirc&region=NavBar) for house and senate candidates and inputted into this [google sheet](https://docs.google.com/spreadsheets/d/1azMpRjQ9sRgW_ULf6qvpouKnwAHWRi_eY1U-RnLPKjI/edit?usp=sharing). During this process, we identified discrepancies between our candidate data and the information shown on NYT (a deceased house incumbent and districts that had no opponent). We used this information to filter districts in our final data set used for analysis.
 
-```{r,  include=FALSE}
+```{r,  warning=FALSE}
 
 # load 538 primary candidates
 dem <- read.csv("https://raw.githubusercontent.com/fivethirtyeight/data/master/primary-project-2022/dem_candidates.csv")
@@ -134,7 +134,7 @@ nyt_election_results <- read.csv(paste(wd, "/input data/", "NYT Election Tracker
 
 ```
 
-Data processing can be viewed in R markdown file
+All data processing can be viewed in R markdown file.
 ```{r, include = FALSE}
 
 # process 538 primary candidate data 
